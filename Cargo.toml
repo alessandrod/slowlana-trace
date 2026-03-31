@@ -1,0 +1,11 @@
+[package]
+name = "slowlana-trace"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+shaq = "2.0.0"
+
+[lib]
+path = "src/lib.rs"
