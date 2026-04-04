@@ -18,6 +18,9 @@ pub enum EventKind {
     RepairStats = 4,
     SchedulingDetails = 5,
     PohSlot = 6,
+    ShredRecvRange = 7,
+    ShredFrontier = 8,
+    ShredGap = 9,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -71,6 +74,60 @@ pub struct TurbineSlotCompleteEvent {
     pub slot: u64,
     pub start_ts: u64,
     pub end_ts: u64,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(u64)]
+pub enum ShredSource {
+    Normal = 1,
+    Repair = 2,
+    Recovered = 3,
+}
+
+impl ShredSource {
+    pub fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            1 => Some(Self::Normal),
+            2 => Some(Self::Repair),
+            3 => Some(Self::Recovered),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct ShredRecvRangeEvent {
+    pub pid: u32,
+    pub tid: u32,
+    pub ts: u64,
+    pub slot: u64,
+    pub start_index: u64,
+    pub end_index: u64,
+    pub source: u64,
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct ShredFrontierEvent {
+    pub pid: u32,
+    pub tid: u32,
+    pub ts: u64,
+    pub slot: u64,
+    pub highest_received: u64,
+    pub consumed: u64,
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct ShredGapEvent {
+    pub pid: u32,
+    pub tid: u32,
+    pub start_ts: u64,
+    pub end_ts: u64,
+    pub slot: u64,
+    pub start_index: u64,
+    pub end_index: u64,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -141,6 +198,9 @@ pub union EventPayload {
     pub repair_stats: RepairStatsEvent,
     pub scheduling_details: SchedulingDetailsEvent,
     pub poh_slot: PohSlotEvent,
+    pub shred_recv_range: ShredRecvRangeEvent,
+    pub shred_frontier: ShredFrontierEvent,
+    pub shred_gap: ShredGapEvent,
 }
 
 #[derive(Copy, Clone)]
@@ -202,6 +262,31 @@ impl Event {
             payload: EventPayload { poh_slot: event },
         }
     }
+
+    pub fn shred_recv_range(event: ShredRecvRangeEvent) -> Self {
+        Self {
+            kind: EventKind::ShredRecvRange,
+            payload: EventPayload {
+                shred_recv_range: event,
+            },
+        }
+    }
+
+    pub fn shred_frontier(event: ShredFrontierEvent) -> Self {
+        Self {
+            kind: EventKind::ShredFrontier,
+            payload: EventPayload {
+                shred_frontier: event,
+            },
+        }
+    }
+
+    pub fn shred_gap(event: ShredGapEvent) -> Self {
+        Self {
+            kind: EventKind::ShredGap,
+            payload: EventPayload { shred_gap: event },
+        }
+    }
 }
 
 pub fn trace_paths(pid: u32, dir: impl AsRef<Path>) -> AgaveTracePaths {
@@ -225,7 +310,8 @@ fn queue_paths(dir: &Path, pid: u32, stream: &str) -> TraceQueuePaths {
 mod tests {
     use {
         crate::agave::{
-            trace_paths, PohSlotEvent, ReplaySlotCompleteEvent, TransactionEvent, DEFAULT_TRACE_DIR,
+            trace_paths, PohSlotEvent, ReplaySlotCompleteEvent, ShredFrontierEvent, ShredGapEvent,
+            ShredRecvRangeEvent, TransactionEvent, DEFAULT_TRACE_DIR,
         },
         std::{mem, path::Path},
     };
@@ -233,6 +319,9 @@ mod tests {
     #[test]
     fn agave_event_layouts_are_stable() {
         assert_eq!(mem::size_of::<PohSlotEvent>(), 32);
+        assert_eq!(mem::size_of::<ShredRecvRangeEvent>(), 48);
+        assert_eq!(mem::size_of::<ShredFrontierEvent>(), 40);
+        assert_eq!(mem::size_of::<ShredGapEvent>(), 48);
         assert_eq!(mem::size_of::<TransactionEvent>(), 88);
         assert!(mem::size_of::<crate::agave::Event>() >= mem::size_of::<ReplaySlotCompleteEvent>());
     }
