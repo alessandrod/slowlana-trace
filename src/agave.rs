@@ -22,6 +22,7 @@ pub enum EventKind {
     ShredFrontier = 8,
     ShredGap = 9,
     ShredTurbineLayer = 10,
+    ShredRecvTimestamp = 11,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -96,6 +97,23 @@ impl ShredSource {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[repr(u64)]
+pub enum ShredKind {
+    Data = 1,
+    Code = 2,
+}
+
+impl ShredKind {
+    pub fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            1 => Some(Self::Data),
+            2 => Some(Self::Code),
+            _ => None,
+        }
+    }
+}
+
 pub const UNKNOWN_TURBINE_LAYER: u64 = u64::MAX;
 
 #[derive(Debug, Copy, Clone)]
@@ -108,6 +126,7 @@ pub struct ShredRecvRangeEvent {
     pub start_index: u64,
     pub end_index: u64,
     pub source: u64,
+    pub shred_kind: u64,
     pub turbine_layer: u64,
 }
 
@@ -119,7 +138,19 @@ pub struct ShredTurbineLayerEvent {
     pub ts: u64,
     pub slot: u64,
     pub index: u64,
+    pub shred_kind: u64,
     pub turbine_layer: u64,
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct ShredRecvTimestampEvent {
+    pub pid: u32,
+    pub tid: u32,
+    pub ts: u64,
+    pub slot: u64,
+    pub index: u64,
+    pub shred_kind: u64,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -215,6 +246,7 @@ pub union EventPayload {
     pub poh_slot: PohSlotEvent,
     pub shred_recv_range: ShredRecvRangeEvent,
     pub shred_turbine_layer: ShredTurbineLayerEvent,
+    pub shred_recv_timestamp: ShredRecvTimestampEvent,
     pub shred_frontier: ShredFrontierEvent,
     pub shred_gap: ShredGapEvent,
 }
@@ -297,6 +329,15 @@ impl Event {
         }
     }
 
+    pub fn shred_recv_timestamp(event: ShredRecvTimestampEvent) -> Self {
+        Self {
+            kind: EventKind::ShredRecvTimestamp,
+            payload: EventPayload {
+                shred_recv_timestamp: event,
+            },
+        }
+    }
+
     pub fn shred_frontier(event: ShredFrontierEvent) -> Self {
         Self {
             kind: EventKind::ShredFrontier,
@@ -336,7 +377,8 @@ mod tests {
     use {
         crate::agave::{
             trace_paths, PohSlotEvent, ReplaySlotCompleteEvent, ShredFrontierEvent, ShredGapEvent,
-            ShredRecvRangeEvent, ShredTurbineLayerEvent, TransactionEvent, DEFAULT_TRACE_DIR,
+            ShredRecvRangeEvent, ShredRecvTimestampEvent, ShredTurbineLayerEvent, TransactionEvent,
+            DEFAULT_TRACE_DIR,
         },
         std::{mem, path::Path},
     };
@@ -344,8 +386,9 @@ mod tests {
     #[test]
     fn agave_event_layouts_are_stable() {
         assert_eq!(mem::size_of::<PohSlotEvent>(), 32);
-        assert_eq!(mem::size_of::<ShredRecvRangeEvent>(), 56);
-        assert_eq!(mem::size_of::<ShredTurbineLayerEvent>(), 40);
+        assert_eq!(mem::size_of::<ShredRecvRangeEvent>(), 64);
+        assert_eq!(mem::size_of::<ShredTurbineLayerEvent>(), 48);
+        assert_eq!(mem::size_of::<ShredRecvTimestampEvent>(), 40);
         assert_eq!(mem::size_of::<ShredFrontierEvent>(), 40);
         assert_eq!(mem::size_of::<ShredGapEvent>(), 48);
         assert_eq!(mem::size_of::<TransactionEvent>(), 88);
